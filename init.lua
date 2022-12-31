@@ -202,12 +202,11 @@ end
 
 -- PREVIEW
 
-local clear_needed = true
 local image_previewed = ""
 
 local function clear_image_preview()
     image_previewed = ""
-    os.execute(string.format("python3 %s/.config/xplr/plugins/preview/imagePreviewer.py clear &", home))
+    os.execute(string.format("python3 %s/.config/xplr/plugins/preview/imageDisplayer.py clear &", home))
 end
 
 local function preview_text(file, ctx, args)
@@ -215,10 +214,10 @@ local function preview_text(file, ctx, args)
         clear_image_preview()
     end
 
-    local preview = {}
+    local text_preview = {}
 
     if args.text.highlight.enable then
-        preview = xplr.util.shell_execute(
+        text_preview = xplr.util.shell_execute(
             "highlight",
             {
                 "--out-format=" .. (args.text.highlight.method or "ansi"),
@@ -228,13 +227,13 @@ local function preview_text(file, ctx, args)
             }
         )
     else
-        preview = xplr.util.shell_execute(
+        text_preview = xplr.util.shell_execute(
             "head",
             { "-" .. ctx.layout_size.height - 2, file.absolute_path }
         )
     end
 
-    return (preview.returncode == 0 and preview.stdout) or stats(file)
+    return (text_preview.returncode == 0 and text_preview.stdout) or stats(file)
 end
 
 local function preview_image(image, ctx, args)
@@ -242,9 +241,9 @@ local function preview_image(image, ctx, args)
         local x, y = ctx.layout_size.x + 1, ctx.layout_size.y + 1
         local height, width = ctx.layout_size.height - 2, ctx.layout_size.width - 2
         -- os.execute is better here
-        local success = os.execute(
+        local returncode = os.execute(
             string.format(
-                "python3 %s/.config/xplr/plugins/preview/imagePreviewer.py %d %d %d %d %s",
+                "python3 %s/.config/xplr/plugins/preview/imageDisplayer.py %d %d %d %d %s",
                 home,
                 x,
                 y,
@@ -253,14 +252,14 @@ local function preview_image(image, ctx, args)
                 image.absolute_path
             )
         )
-        image_previewed = (success and image.absolute_path) or ""
-        return (success and "") or stats(image)
+        image_previewed = (returncode == 0 and image.absolute_path) or ""
+        return (returncode == 0 and "") or stats(image) .. "\n\n Image couldn't be previewed"
     elseif (image_previewed ~= image.absolute_path) and args.image.method == "viu" then
         local preview = xplr.util.shell_execute(
             "viu",
             { "--blocks", "--static", "--width", ctx.layout_size.width - 2, image.absolute_path }
         )
-        return (preview.returncode == 0 and preview.stdout) or stats(image)
+        return (preview.returncode == 0 and preview.stdout) or stats(image) .. "\n\n Image couldn't be previewed"
     elseif (image_previewed ~= image.absolute_path) then
         return stats(image)
     else

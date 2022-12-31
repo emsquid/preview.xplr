@@ -14,8 +14,8 @@ from contextlib import contextmanager
 
 def move_cursor(to_y, to_x):
     tparm = curses.tparm(curses.tigetstr("cup"), to_y, to_x)
-    bin_stdout = getattr(sys.stdout, "buffer", sys.stdout)
-    bin_stdout.write(tparm)
+    stdbout = getattr(sys.stdout, "buffer", sys.stdout)
+    stdbout.write(tparm)
 
 
 @contextmanager
@@ -40,8 +40,7 @@ class KittyImageDisplayer(object):
 
     def __init__(self):
         if "kitty" not in os.environ["TERM"]:
-            print("Kitty is required to preview images")
-            exit()
+            exit(1)
 
         self.protocol_start = b"\x1b_G"
         self.protocol_end = b"\x1b\\"
@@ -61,8 +60,7 @@ class KittyImageDisplayer(object):
 
             self.backend = PIL.Image
         except ImportError:
-            print("PIL is required to preview images")
-            exit()
+            exit(1)
 
         ret = fcntl.ioctl(
             sys.stdout, termios.TIOCGWINSZ, struct.pack("HHHH", 0, 0, 0, 0)
@@ -71,21 +69,23 @@ class KittyImageDisplayer(object):
 
         self.pix_row, self.pix_col = x_px_tot // n_rows, y_px_tot // n_cols
 
-    def serialize_cmd(self, cmd, payload=None, max_slice_len=4096):
+    def serialize_cmd(self, cmd, payload=None, max_slice_len=2048 * 2):
         cmd = ",".join(f"{k}={v}" for k, v in cmd.items()).encode("ascii")
 
         if payload is not None:
             while len(payload) > max_slice_len:
                 chunk, payload = payload[:max_slice_len], payload[max_slice_len:]
                 yield self.protocol_start + cmd + b",m=1;" + chunk + self.protocol_end
+
             yield self.protocol_start + cmd + b",m=0;" + payload + self.protocol_end
         else:
             yield self.protocol_start + cmd + b";" + self.protocol_end
 
     def draw(self, path, x, y, width, height):
         self.draw_init()
+        self.clear()
 
-        cmd = {"a": "T", "t": "t", "f": 100}
+        cmd = {"a": "T", "t": "t", "f": 100, "i": 1, "q": 1}
 
         with warnings.catch_warnings(record=True):
             warnings.simplefilter("ignore", self.backend.DecompressionBombWarning)
@@ -103,11 +103,9 @@ class KittyImageDisplayer(object):
         if image.mode not in ("RGB", "RGBA"):
             image = image.convert("RGB")
 
-        # background to hide what may be behind the preview before it disappears
-        # background = self.backend.new("RGBA", size, (0, 0, 0))
-        # background.paste(image)
-
-        with NamedTemporaryFile(prefix="preview", suffix=".png", delete=False) as tmpf:
+        with NamedTemporaryFile(
+            prefix="tty-graphics-protocol", suffix=".png", delete=False
+        ) as tmpf:
             image.save(tmpf, format="png", compress_level=0)
             payload = base64.standard_b64encode(tmpf.name.encode(self.fs_enc))
 
@@ -116,7 +114,7 @@ class KittyImageDisplayer(object):
                 self.stdbout.write(cmd_str)
 
     def clear(self):
-        cmds = {"a": "d"}
+        cmds = {"a": "d", "d": "i", "i": 1}
 
         for cmd_str in self.serialize_cmd(cmds):
             self.stdbout.write(cmd_str)
