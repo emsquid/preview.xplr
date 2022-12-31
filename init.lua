@@ -1,6 +1,9 @@
 ---@diagnostic disable
 local xplr = xplr
 ---@diagnostic enable
+local home = os.getenv("HOME") or "~"
+
+-- HELPERS
 
 local style_module = require("style")
 local style = style_module.style
@@ -25,6 +28,21 @@ local function datetime(num)
     return tostring(os.date("%a %b %d %H:%M:%S %Y", num / 1000000000))
 end
 
+local function mime_type(node)
+    return xplr.util.shell_execute(
+        "file",
+        {
+            "--brief",
+            "--mime-type",
+            node.absolute_path
+        }
+    ).stdout
+end
+
+local function escape(path)
+    return string.gsub(string.gsub(path, "\\", "\\\\"), "\n", "\\n")
+end
+
 local function bit(x, color, cond)
     if cond then
         return color(x)
@@ -32,6 +50,8 @@ local function bit(x, color, cond)
         return color("-")
     end
 end
+
+-- FORMATTING
 
 local function permissions(p)
     local result = ""
@@ -148,15 +168,11 @@ local function icon(node)
 end
 
 local function format(node)
-    local function path_escape(path)
-        return string.gsub(string.gsub(path, "\\", "\\\\"), "\n", "\\n")
-    end
-
     -- ICON
     local node_icon = icon(node)
 
     -- NAME
-    local node_name = path_escape(node.relative_path)
+    local node_name = escape(node.relative_path)
 
     if node.is_dir then
         node_name = node_name .. "/"
@@ -170,7 +186,7 @@ local function format(node)
         if node.is_broken then
             node_name = node_name .. "×"
         else
-            node_name = node_name .. path_escape(node.symlink.absolute_path)
+            node_name = node_name .. escape(node.symlink.absolute_path)
 
             if node.symlink.is_dir then
                 node_name = node_name .. "/"
@@ -184,37 +200,24 @@ local function format(node)
     return node_style(node_icon .. " " .. node_name .. separator)
 end
 
-local function preview_dir(dir, ctx, args)
-    local subnodes = {}
+-- PREVIEW
 
-    local ok, nodes = pcall(xplr.util.explore, dir.absolute_path, ctx.app.explorer_config)
+local clear_needed = true
+local image_previewed = ""
 
-    if not ok then
-        nodes = {}
-    end
+local function preview_text(file, ctx, args)
+    clear_needed = (image_previewed ~= "")
 
-    for i, node in ipairs(nodes) do
-        if i > ctx.layout_size.height + 1 then
-            break
-        else
-            table.insert(subnodes, format(node))
-        end
-    end
-
-    return subnodes
-end
-
-local function preview_file(file, ctx, args)
     local preview = {}
 
-    if args.highlight.enable then
+    if args.text.highlight.enable then
         preview = xplr.util.shell_execute(
             "highlight",
             {
-                "--out-format=" .. (args.highlight.method or "ansi"),
+                "--out-format=" .. (args.text.highlight.method or "ansi"),
                 "--line-range=1-" .. ctx.layout_size.height,
-                "--style=" .. (args.highlight.style or "night"),
-                file.absolute_path
+                "--style=" .. (args.text.highlight.style or "night"),
+                file.absolute_path,
             }
         )
     else
@@ -224,37 +227,120 @@ local function preview_file(file, ctx, args)
         )
     end
 
-    if preview == {} or preview.returncode == 1 then
-        return stats(file)
+    return (preview.returncode == 0 and preview.stdout) or stats(file)
+end
+
+local function preview_image(image, ctx, args)
+    if (image_previewed ~= image.absolute_path) and args.image.method == "kitty" then
+        local x, y = ctx.layout_size.x + 1, ctx.layout_size.y + 1
+        local height, width = ctx.layout_size.height - 2, ctx.layout_size.width - 2
+        -- os.execute is better here
+        local success = os.execute(
+            string.format(
+                "python3 %s/.config/xplr/plugins/preview/imagePreviewer.py %d %d %d %d %s",
+                home,
+                x,
+                y,
+                width,
+                height,
+                image.absolute_path
+            )
+        )
+        image_previewed = (success and image.absolute_path) or ""
+        return (success and "") or stats(image)
+    elseif (image_previewed ~= image.absolute_path) and args.image.method == "viu" then
+        local preview = xplr.util.shell_execute(
+            "viu",
+            { "--blocks", "--static", "--width", ctx.layout_size.width, image.absolute_path }
+        )
+        return (preview.returncode == 0 and preview.stdout) or stats(image)
+    elseif (image_previewed ~= image.absolute_path) then
+        return stats(image)
     else
-        return preview.stdout
+        return ""
+    end
+end
+
+local function preview_dir(dir, ctx, args)
+    clear_needed = (image_previewed ~= "")
+
+    local nodes = xplr.util.explore(dir.absolute_path, ctx.app.explorer_config)
+    local subnodes = ""
+
+    for i, node in ipairs(nodes) do
+        if i > ctx.layout_size.height + 1 then
+            break
+        elseif args.directory.style then
+            subnodes = subnodes .. format(node) .. "\n"
+        else
+            subnodes = subnodes .. node.relative_path .. "\n"
+        end
+    end
+
+    return subnodes
+end
+
+local function preview(node, ctx, args)
+    local mime = mime_type(node)
+
+    if node.is_file then
+        if args.text.enable and (mime:match("text") or mime:match("json")) then
+            return preview_text(node, ctx, args)
+        elseif args.image.enable and (mime:match("image") or mime:match("video")) then
+            return preview_image(node, ctx, args)
+        else
+            return stats(node)
+        end
+    elseif args.directory.enable and node.is_dir then
+        return preview_dir(node, ctx, args)
+    else
+        return stats(node)
     end
 end
 
 local function setup(args)
     args = args or {}
 
-    xplr.fn.custom.preview_pane = { render = function(ctx)
-        local node = ctx.app.focused_node
+    args.as_default = args.as_default or false
+    args.keybind = args.keybind or "P"
 
-        if node then
-            if node.is_file then
-                return preview_file(node, ctx, args)
-            elseif node.is_dir then
-                local subnodes = preview_dir(node, ctx, args)
-                return table.concat(subnodes, "\n")
+    args.left_pane_constraint = args.left_pane_constraint or { Percentage = 55 }
+    args.right_pane_constraint = args.right_pane_constraint or { Percentage = 45 }
+
+    args.text = args.text or {}
+    args.text.enable = args.text.enable or (args.text.enable == nil and true)
+    args.text.highlight = args.text.highlight or {}
+
+    args.image = args.image or {}
+    args.image.enable = args.image.enable or false
+    args.image.method = (args.image.enable and args.image.method) or ""
+
+    args.directory = args.directory or {}
+    args.directory.enable = args.directory.enable or (args.directory.enable == nil and true)
+    args.directory.style = args.directory.style or (args.directory.style == nil and true)
+
+    xplr.fn.custom.preview = {
+        render = function(ctx)
+            local node = ctx.app.focused_node
+
+            if node then
+                return preview(node, ctx, args)
             else
-                return stats(node)
+                return ""
             end
-        else
-            return ""
+        end,
+        on_focus_change = function()
+            if clear_needed then
+                image_previewed = ""
+                os.execute(string.format("python3 %s/.config/xplr/plugins/preview/imagePreviewer.py clear &", home))
+            end
         end
-    end }
+    }
 
     local preview_pane = {
         CustomContent = {
             title = "Preview",
-            body = { DynamicParagraph = { render = "custom.preview_pane.render" } },
+            body = { DynamicParagraph = { render = "custom.preview.render" } },
         },
     }
 
@@ -271,8 +357,8 @@ local function setup(args)
                     Horizontal = {
                         config = {
                             constraints = {
-                                args.left_pane_width or { Percentage = 55 },
-                                args.right_pane_width or { Percentage = 45 },
+                                args.left_pane_constraint,
+                                args.right_pane_constraint
                             },
                         },
                         splits = {
@@ -291,7 +377,7 @@ local function setup(args)
     else
         xplr.config.layouts.custom.preview = preview_layout
 
-        xplr.config.modes.builtin.switch_layout.key_bindings.on_key[args.keybind or "P"] = {
+        xplr.config.modes.builtin.switch_layout.key_bindings.on_key[args.keybind] = {
             help = "preview",
             messages = {
                 "PopMode",
