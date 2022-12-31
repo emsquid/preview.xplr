@@ -205,8 +205,15 @@ end
 local clear_needed = true
 local image_previewed = ""
 
+local function clear_image_preview()
+    image_previewed = ""
+    os.execute(string.format("python3 %s/.config/xplr/plugins/preview/imagePreviewer.py clear &", home))
+end
+
 local function preview_text(file, ctx, args)
-    clear_needed = (image_previewed ~= "")
+    if image_previewed ~= "" then
+        clear_image_preview()
+    end
 
     local preview = {}
 
@@ -215,7 +222,7 @@ local function preview_text(file, ctx, args)
             "highlight",
             {
                 "--out-format=" .. (args.text.highlight.method or "ansi"),
-                "--line-range=1-" .. ctx.layout_size.height,
+                "--line-range=1-" .. ctx.layout_size.height - 2,
                 "--style=" .. (args.text.highlight.style or "night"),
                 file.absolute_path,
             }
@@ -223,7 +230,7 @@ local function preview_text(file, ctx, args)
     else
         preview = xplr.util.shell_execute(
             "head",
-            { "-" .. ctx.layout_size.height, file.absolute_path }
+            { "-" .. ctx.layout_size.height - 2, file.absolute_path }
         )
     end
 
@@ -251,7 +258,7 @@ local function preview_image(image, ctx, args)
     elseif (image_previewed ~= image.absolute_path) and args.image.method == "viu" then
         local preview = xplr.util.shell_execute(
             "viu",
-            { "--blocks", "--static", "--width", ctx.layout_size.width, image.absolute_path }
+            { "--blocks", "--static", "--width", ctx.layout_size.width - 2, image.absolute_path }
         )
         return (preview.returncode == 0 and preview.stdout) or stats(image)
     elseif (image_previewed ~= image.absolute_path) then
@@ -262,7 +269,9 @@ local function preview_image(image, ctx, args)
 end
 
 local function preview_dir(dir, ctx, args)
-    clear_needed = (image_previewed ~= "")
+    if image_previewed ~= "" then
+        clear_image_preview()
+    end
 
     local nodes = xplr.util.explore(dir.absolute_path, ctx.app.explorer_config)
     local subnodes = ""
@@ -281,9 +290,9 @@ local function preview_dir(dir, ctx, args)
 end
 
 local function preview(node, ctx, args)
-    local mime = mime_type(node)
-
     if node.is_file then
+        local mime = mime_type(node)
+
         if args.text.enable and (mime:match("text") or mime:match("json")) then
             return preview_text(node, ctx, args)
         elseif args.image.enable and (mime:match("image") or mime:match("video")) then
@@ -329,12 +338,6 @@ local function setup(args)
                 return ""
             end
         end,
-        on_focus_change = function()
-            if clear_needed then
-                image_previewed = ""
-                os.execute(string.format("python3 %s/.config/xplr/plugins/preview/imagePreviewer.py clear &", home))
-            end
-        end
     }
 
     local preview_pane = {

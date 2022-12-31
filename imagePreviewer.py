@@ -97,7 +97,7 @@ class KittyImageDisplayer(object):
             scale = min(size[0] / image.width, size[1] / image.height)
             image = image.resize(
                 (int(scale * image.width), int(scale * image.height)),
-                self.backend.Resampling.LANCZOS,
+                self.backend.Resampling.BICUBIC,
             )
 
         if image.mode not in ("RGB", "RGBA"):
