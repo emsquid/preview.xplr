@@ -5,6 +5,7 @@ local home = os.getenv("HOME") or "~"
 
 -- HELPERS
 
+local Image = require("preview.lib.imageDisplayer")
 local style_module = require("style")
 local style = style_module.style
 local separator = style_module.separator
@@ -22,6 +23,10 @@ local function split(str, sep)
     end
 
     return t
+end
+
+local function table_match(a, b)
+    return table.concat(a) == table.concat(b)
 end
 
 local function datetime(num)
@@ -99,30 +104,30 @@ local function permissions(p)
 end
 
 local function stats(node)
-    local type = node.mime_essence
+    local type = (node.mime_essence ~= "" and node.mime_essence .. "\n") or mime_type(node)
 
     if node.is_symlink then
         if node.is_broken then
-            type = "broken symlink"
+            type = "broken symlink" .. "\n"
         else
-            type = "symlink to: " .. node.symlink.absolute_path
+            type = "symlink to: " .. node.symlink.absolute_path .. "\n"
         end
     end
 
     return style.fg[xplr.config.node_types.symlink.style.fg](node.relative_path)
-        .. separator
-        .. "\n Type     : "
+        .. separator .. "\n"
+        .. "Type     : "
         .. type
-        .. "\n Size     : "
-        .. node.human_size
-        .. "\n Owner    : "
-        .. node.uid .. ":" .. node.gid
-        .. "\n Perm     : "
-        .. permissions(node.permissions)
-        .. "\n Created  : "
-        .. datetime(node.created)
-        .. "\n Modified : "
-        .. datetime(node.last_modified)
+        .. "Size     : "
+        .. node.human_size .. "\n"
+        .. "Owner    : "
+        .. node.uid .. ":" .. node.gid .. "\n"
+        .. "Perm     : "
+        .. permissions(node.permissions) .. "\n"
+        .. "Created  : "
+        .. datetime(node.created) .. "\n"
+        .. "Modified : "
+        .. datetime(node.last_modified) .. "\n"
 end
 
 local function icon(node)
@@ -202,17 +207,51 @@ end
 
 -- PREVIEW
 
-local image_previewed = ""
+local previewed = {
+    preview = nil,
+    type = nil,
+    absolute_path = nil,
+    x = nil,
+    y = nil,
+    width = nil,
+    height = nil,
+}
+
+local function save_preview(result, type, node, ctx)
+    local x, y = ctx.layout_size.x + 1, ctx.layout_size.y + 1
+    local width, height = ctx.layout_size.width - 2, ctx.layout_size.height - 2
+
+    previewed = {
+        preview = result,
+        type = type,
+        absolute_path = node.absolute_path,
+        x = x,
+        y = y,
+        width = width,
+        height = height
+    }
+end
+
+local function should_reload_preview(node, ctx)
+    return (
+        previewed.absolute_path ~= node.absolute_path
+            or previewed.x ~= ctx.layout_size.x + 1
+            or previewed.y ~= ctx.layout_size.y + 1
+            or previewed.width ~= ctx.layout_size.width - 2
+            or previewed.height ~= ctx.layout_size.height - 2
+        )
+end
 
 local function clear_image_preview()
-    image_previewed = ""
-    os.execute(string.format("python3 %s/.config/xplr/plugins/preview/imageDisplayer.py clear &", home))
+    if previewed.type == "image" then
+        -- Image.clear(1)
+        previewed = {}
+        os.execute(string.format("python3 %s/.config/xplr/plugins/preview/lib/helper.py clear", home))
+    end
 end
 
 local function preview_text(file, ctx, args)
-    if image_previewed ~= "" then
-        clear_image_preview()
-    end
+    clear_image_preview()
 
     local text_preview = {}
 
@@ -237,13 +276,20 @@ local function preview_text(file, ctx, args)
 end
 
 local function preview_image(image, ctx, args)
-    if (image_previewed ~= image.absolute_path) and args.image.method == "kitty" then
+    clear_image_preview()
+
+    local image_preview = ""
+
+    if args.image.method == "kitty" then
         local x, y = ctx.layout_size.x + 1, ctx.layout_size.y + 1
-        local height, width = ctx.layout_size.height - 2, ctx.layout_size.width - 2
+        local width, height = ctx.layout_size.width - 2, ctx.layout_size.height - 2
+
+        -- local success = Image.display(image.absolute_path, x, y, width, height)
+
         -- os.execute is better here
         local returncode = os.execute(
             string.format(
-                "python3 %s/.config/xplr/plugins/preview/imageDisplayer.py %d %d %d %d %s",
+                "python3 %s/.config/xplr/plugins/preview/lib/helper.py %d %d %d %d %s",
                 home,
                 x,
                 y,
@@ -252,58 +298,84 @@ local function preview_image(image, ctx, args)
                 image.absolute_path
             )
         )
-        image_previewed = (returncode == 0 and image.absolute_path) or ""
-        return (returncode == 0 and "") or stats(image) .. "\n\n Image couldn't be previewed"
-    elseif (image_previewed ~= image.absolute_path) and args.image.method == "viu" then
-        local preview = xplr.util.shell_execute(
+
+        image_preview = (returncode == 0 and "") or stats(image) .. "\n\n Image couldn't be previewed"
+    elseif args.image.method == "viu" then
+        local result = xplr.util.shell_execute(
             "viu",
             { "--blocks", "--static", "--width", ctx.layout_size.width - 2, image.absolute_path }
         )
-        return (preview.returncode == 0 and preview.stdout) or stats(image) .. "\n\n Image couldn't be previewed"
-    elseif (image_previewed ~= image.absolute_path) then
-        return stats(image)
+
+        image_preview = (result.returncode == 0 and result.stdout) or stats(image) .. "\n\n Image couldn't be previewed"
     else
-        return ""
+        image_preview = stats(image)
     end
+
+    return image_preview
 end
 
 local function preview_dir(dir, ctx, args)
-    if image_previewed ~= "" then
-        clear_image_preview()
-    end
+    clear_image_preview()
 
-    local nodes = xplr.util.explore(dir.absolute_path, ctx.app.explorer_config)
-    local subnodes = ""
+    local dir_preview = ""
+    local ok, nodes = pcall(xplr.util.explore, dir.absolute_path, ctx.app.explorer_config)
 
-    for i, node in ipairs(nodes) do
-        if i > ctx.layout_size.height + 1 then
-            break
-        elseif args.directory.style then
-            subnodes = subnodes .. format(node) .. "\n"
-        else
-            subnodes = subnodes .. node.relative_path .. "\n"
+    if ok then
+        for i, node in ipairs(nodes) do
+            if i > ctx.layout_size.height - 2 then
+                break
+            elseif args.directory.style then
+                dir_preview = dir_preview .. format(node) .. "\n"
+            else
+                dir_preview = dir_preview .. node.relative_path .. "\n"
+            end
         end
+    else
+        dir_preview = stats(dir)
     end
 
-    return subnodes
+    return dir_preview
+end
+
+local function preview_stats(node, ctx, args)
+    clear_image_preview()
+
+    return stats(node)
 end
 
 local function preview(node, ctx, args)
-    if node.is_file then
-        local mime = mime_type(node)
+    local result = ""
 
-        if args.text.enable and (mime:match("text") or mime:match("json")) then
-            return preview_text(node, ctx, args)
-        elseif args.image.enable and (mime:match("image") or mime:match("video")) then
-            return preview_image(node, ctx, args)
+    if should_reload_preview(node, ctx) then
+        local type = ""
+
+        if node.is_file then
+            local mime = mime_type(node)
+
+            if args.text.enable and (mime:match("text") or mime:match("json")) then
+                result = preview_text(node, ctx, args)
+                type = "text"
+            elseif args.image.enable and (mime:match("image") or mime:match("video")) then
+                result = preview_image(node, ctx, args)
+                type = "image"
+            else
+                result = preview_stats(node, ctx, args)
+                type = "file"
+            end
+        elseif args.directory.enable and node.is_dir then
+            result = preview_dir(node, ctx, args)
+            type = "directory"
         else
-            return stats(node)
+            result = preview_stats(node, ctx, args)
+            type = "unknown"
         end
-    elseif args.directory.enable and node.is_dir then
-        return preview_dir(node, ctx, args)
+
+        save_preview(result, type, node, ctx)
     else
-        return stats(node)
+        result = previewed.preview
     end
+
+    return result
 end
 
 local function setup(args)
@@ -326,18 +398,6 @@ local function setup(args)
     args.directory = args.directory or {}
     args.directory.enable = args.directory.enable or (args.directory.enable == nil and true)
     args.directory.style = args.directory.style or (args.directory.style == nil and true)
-
-    xplr.fn.custom.preview = {
-        render = function(ctx)
-            local node = ctx.app.focused_node
-
-            if node then
-                return preview(node, ctx, args)
-            else
-                return ""
-            end
-        end,
-    }
 
     local preview_pane = {
         CustomContent = {
@@ -372,6 +432,23 @@ local function setup(args)
                 "InputAndLogs",
             },
         },
+    }
+
+    xplr.fn.custom.preview = {
+        render = function(ctx)
+            local node = ctx.app.focused_node
+
+            if node then
+                return preview(node, ctx, args)
+            else
+                return ""
+            end
+        end,
+        clear_image_preview = function(app)
+            if app.mode.layout ~= nil or not table_match(app.layout, preview_layout) then
+                clear_image_preview()
+            end
+        end
     }
 
     if args.as_default then

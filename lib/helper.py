@@ -42,8 +42,8 @@ class KittyImageDisplayer(object):
         if "kitty" not in os.environ["TERM"]:
             exit(1)
 
-        self.protocol_start = b"\x1b_G"
-        self.protocol_end = b"\x1b\\"
+        self.protocol_start = b"\033_G"
+        self.protocol_end = b"\033\\"
 
         self.stdbout = getattr(sys.stdout, "buffer", sys.stdout)
         self.stdbin = getattr(sys.stdin, "buffer", sys.stdin)
@@ -97,11 +97,8 @@ class KittyImageDisplayer(object):
             scale = min(size[0] / image.width, size[1] / image.height)
             image = image.resize(
                 (int(scale * image.width), int(scale * image.height)),
-                self.backend.Resampling.BICUBIC,
+                self.backend.Resampling.LANCZOS,
             )
-
-        if image.mode not in ("RGB", "RGBA"):
-            image = image.convert("RGB")
 
         with NamedTemporaryFile(
             prefix="tty-graphics-protocol", suffix=".png", delete=False
