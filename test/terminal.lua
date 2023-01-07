@@ -1,5 +1,5 @@
 local ffi = require("ffi")
-local base64 = require("preview.lib.base64")
+local base64 = require("preview.test.base64")
 
 local terminal = {}
 

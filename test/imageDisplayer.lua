@@ -1,4 +1,5 @@
-local terminal = require("preview.lib.terminal")
+-- Prototype for an image displayer in lua with lua-vips
+local terminal = require("preview.test.terminal")
 local succes, vips = pcall(require, "vips")
 
 local Image = {
