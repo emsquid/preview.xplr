@@ -7,7 +7,7 @@ This plugin provides a, somewhat cool, preview panel for [xplr](https://xplr.dev
 - `style` requires my [styling plugin](https://github.com/emsquid/style.xplr).
 - `highlight` requires [highlight](https://gitlab.com/saalen/highlight) command line tool
 - `image` requires [viu](https://github.com/atanunq/viu) for blocks preview, or [kitty](https://github.com/kovidgoyal/kitty) terminal for better (but slower) preview
-> **NOTE**: As of now kitty image preview requires python3 and [Pillow](https://pypi.org/project/Pillow/) library to be installed. I made a lua implementation but it was twice less efficient 
+    > **NOTE**: As of now kitty image preview requires python3 and [Pillow](https://pypi.org/project/Pillow/) library to be installed. I made a lua implementation but it was twice less efficient (see [test](https://github.com/emsquid/preview.xplr/tree/main/test)) 
 
 ## Installation
 
