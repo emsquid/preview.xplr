@@ -4,7 +4,14 @@ local xplr = xplr
 local helper = require("preview.lib.helper")
 local manager = require("preview.lib.previewManager")
 
-local function setup(args)
+local preview_pane = {
+    CustomContent = {
+        title = "Preview",
+        body = { DynamicParagraph = { render = "custom.preview.render" } },
+    },
+}
+
+local function build_args(args)
     args = args or {}
 
     args.as_default = args.as_default or false
@@ -18,6 +25,7 @@ local function setup(args)
     args.text = args.text or {}
     args.text.enable = args.text.enable or (args.text.enable == nil and true)
     args.text.highlight = args.text.highlight or {}
+    args.text.highlight.method = args.text.highlight.method or "ansi"
 
     args.image = args.image or {}
     args.image.enable = args.image.enable or false
@@ -26,12 +34,11 @@ local function setup(args)
     args.directory = args.directory or {}
     args.directory.enable = args.directory.enable or (args.directory.enable == nil and true)
 
-    local preview_pane = {
-        CustomContent = {
-            title = "Preview",
-            body = { DynamicParagraph = { render = "custom.preview.render" } },
-        },
-    }
+    return args
+end
+
+local function setup(args)
+    args = build_args(args)
 
     local preview_layout = {
         Vertical = {

@@ -5,7 +5,7 @@ local home = os.getenv("HOME") or "~"
 local ok, style_module = pcall(require, "style")
 local style = (ok and style_module.style) or {}
 local separator = (ok and style_module.separator) or ""
-local get_node_style = (ok and style_module.get_node_style) or {}
+local get_node_style = (ok and style_module.get_node_style) or function(_) return function(x) return x end end
 
 local helper = {}
 
@@ -46,6 +46,22 @@ function helper.mime_type(node)
             node.absolute_path
         }
     ).stdout:sub(1, -2)
+end
+
+-- TODO: Improve that function to be more precise
+function helper.type(node)
+    local type = "other"
+    if node.is_file then
+        local mime = helper.mime_type(node)
+        if (mime:match("text") or mime:match("json")) then
+            type = "text"
+        elseif (mime:match("image") or mime:match("video")) then
+            type = "image"
+        end
+    elseif node.is_dir then
+        type = "directory"
+    end
+    return type
 end
 
 function helper.permissions(perm, args)
@@ -116,8 +132,7 @@ function helper.stats(node, args)
         end
     end
 
-    return helper.format(node, args)
-        .. separator .. "\n"
+    return helper.format(node, args) .. "\n"
         .. "Type     : "
         .. type .. "\n"
         .. "Size     : "
@@ -196,15 +211,16 @@ function helper.format(node, args)
 
     -- STYLE
     local node_style = (ok and args.style and get_node_style(node)) or function(text) return text end
-    return node_style(node_icon) .. node_style(" " .. node_name .. separator)
+    return node_style(node_icon) .. node_style(" " .. node_name) .. separator
 end
 
-function helper.load_image(image, id, width, height)
+-- TODO: Find a way to send batch of commands
+function helper.load_image(path, id, width, height)
     return os.execute(
         string.format(
             "python3 %s/.config/xplr/plugins/preview/lib/imageDisplayer.py load %s %d %d %d",
             home,
-            image.absolute_path,
+            path,
             id,
             width,
             height

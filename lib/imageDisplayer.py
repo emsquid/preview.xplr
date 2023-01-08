@@ -38,7 +38,6 @@ def send_graphics_command(keys: dict, payload: str = "", size: int = 4096):
 
 
 def clear():
-    # keys = {"a": "d", "d": "i", "i": id}
     keys = {"a": "d", "d": "a"}
     send_graphics_command(keys)
 
@@ -75,15 +74,14 @@ def display(id: int, x: int, y: int):
         send_graphics_command(keys)
 
 
-args = sys.argv
-command = args[1]
+args = sys.argv[1:]
+command = args[0]
 
 if command == "load":
-    path, id, width, height = args[2], args[3], int(args[4]), int(args[5])
+    path, id, width, height = args[1], args[2], int(args[3]), int(args[4])
     load(path, id, width, height)
 elif command == "display":
-    id, x, y = args[2], int(args[3]), int(args[4])
+    id, x, y = args[1], int(args[2]), int(args[3])
     display(id, x, y)
 elif command == "clear":
-    # id = args[2]
     clear()
