@@ -33,6 +33,10 @@ function helper.escape(path)
     return string.gsub(string.gsub(path, "\\", "\\\\"), "\n", "\\n")
 end
 
+function helper.escape_space(path)
+    return string.gsub(path, " ", "\\ ")
+end
+
 function helper.bit(text, color, cond)
     return (cond and color(text)) or color("-")
 end
@@ -214,39 +218,18 @@ function helper.format(node, args)
     return node_style(node_icon) .. node_style(" " .. node_name) .. separator
 end
 
--- TODO: Find a way to send batch of commands
-function helper.load_image(path, id, width, height)
-    return os.execute(
-        string.format(
-            "python3 %s/.config/xplr/plugins/preview/lib/imageDisplayer.py load %s %d %d %d",
-            home,
-            path,
-            id,
-            width,
-            height
-        )
-    ) == 0
-end
+function helper.handle_batch_commands(batch, async)
+    local base_command = "python3 " .. home .. "/.config/xplr/plugins/preview/lib/imageDisplayer.py "
 
-function helper.display_image(id, x, y)
-    return os.execute(
-        string.format(
-            "python3 %s/.config/xplr/plugins/preview/lib/imageDisplayer.py display %d %d %d",
-            home,
-            id,
-            x,
-            y
-        )
-    ) == 0
-end
+    for _, cmd in pairs(batch) do
+        local command = base_command .. cmd
+        if async then
+            command = command .. " &"
+        end
+        os.execute(command)
+    end
 
-function helper.clear_image()
-    return os.execute(
-        string.format(
-            "python3 %s/.config/xplr/plugins/preview/lib/imageDisplayer.py clear",
-            home
-        )
-    ) == 0
+    return true
 end
 
 return helper

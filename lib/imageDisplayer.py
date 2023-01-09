@@ -63,7 +63,7 @@ def load(path: str, id: int, width: int, height: int):
     image_name = f"/tmp/tty-graphics-protocol{id}.png"
     image.save(image_name, format="png", compress_level=0)
 
-    keys = {"a": "t", "t": "t", "f": 100, "i": id, "q": 2}
+    keys = {"a": "t", "t": "f", "f": 100, "i": id, "q": 2}
     send_graphics_command(keys, image_name)
 
 
