@@ -1,6 +1,7 @@
-# preview.xplr ⚠️  WIP ⚠️  
+# preview.xplr
 
 This plugin provides a, somewhat cool, preview panel for [xplr](https://xplr.dev). 
+⚠️  WIP ⚠️
 
 ## Requirements
 
@@ -96,7 +97,7 @@ This plugin provides a, somewhat cool, preview panel for [xplr](https://xplr.dev
 Help would be greatly appreciated
 
 - [x] Highlight text preview
-- [] Allow user to move in text preview
+- [ ] Allow user to move in text preview
 - [x] Style directory preview
-- [] Optimise image preview
+- [ ] Optimise image preview
 - [x] Don't hesitate to try whatever is in your mind
