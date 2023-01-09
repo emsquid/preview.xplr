@@ -1,4 +1,4 @@
-# preview.xplr
+# preview.xplr ⚠️  WIP ⚠️  
 
 This plugin provides a, somewhat cool, preview panel for [xplr](https://xplr.dev). 
 
@@ -90,3 +90,13 @@ This plugin provides a, somewhat cool, preview panel for [xplr](https://xplr.dev
     | `image.enable` | `boolean` | Whether to preview images or not |
     | `image.method` | `string` one of "kitty", "viu" | The method used to display images |
     | `directory.enable` | `boolean` | Whether to preview directories or not |
+
+## Progress
+
+Help would be greatly appreciated
+
+- [x] Highlight text preview
+- [] Allow user to move in text preview
+- [x] Style directory preview
+- [] Optimise image preview
+- [x] Don't hesitate to try whatever is in your mind
