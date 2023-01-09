@@ -4,12 +4,6 @@ local xplr = xplr
 local helper = require("preview.lib.helper")
 local manager = require("preview.lib.previewManager")
 
-local preview_pane = {
-    CustomContent = {
-        title = "Preview",
-        body = { DynamicParagraph = { render = "custom.preview.render" } },
-    },
-}
 
 local function build_args(args)
     args = args or {}
@@ -37,10 +31,17 @@ local function build_args(args)
     return args
 end
 
-local function setup(args)
+local function create_preview_assets(args)
     args = build_args(args)
 
-    local preview_layout = {
+    local assets = {}
+    assets.panel = {
+        CustomContent = {
+            title = "Preview",
+            body = { DynamicParagraph = { render = "custom.preview.render" } },
+        },
+    }
+    assets.layout = {
         Vertical = {
             config = {
                 constraints = {
@@ -59,7 +60,7 @@ local function setup(args)
                         },
                         splits = {
                             "Table",
-                            preview_pane
+                            assets.panel
                         },
                     },
                 },
@@ -79,17 +80,25 @@ local function setup(args)
             end
         end,
         clear_image_preview = function(app)
-            if (app.mode.layout ~= nil or not helper.table_match(app.layout, preview_layout)) and
+            if (app.mode.layout ~= nil or not helper.table_match(app.layout, assets.layout)) and
                 manager.current.type == "image" then
-                helper.clear_image()
+                helper.handle_batch_commands({ "clear" }, false)
             end
         end
     }
 
+    return assets
+end
+
+local function setup(args)
+    args = build_args(args)
+
+    local assets = create_preview_assets(args)
+
     if args.as_default then
-        xplr.config.layouts.builtin.default = preview_layout
+        xplr.config.layouts.builtin.default = assets.layout
     else
-        xplr.config.layouts.custom.preview = preview_layout
+        xplr.config.layouts.custom.preview = assets.layout
 
         xplr.config.modes.builtin.switch_layout.key_bindings.on_key[args.keybind] = {
             help = "preview",
@@ -101,4 +110,4 @@ local function setup(args)
     end
 end
 
-return { setup = setup }
+return { setup = setup, create_preview_assets = create_preview_assets }
