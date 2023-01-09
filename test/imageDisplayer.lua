@@ -1,4 +1,5 @@
--- Prototype for an image displayer in lua with lua-vips
+-- Prototype for an image displayer in lua with lua-vips 
+-- Too slow for now
 local terminal = require("preview.test.terminal")
 local succes, vips = pcall(require, "vips")
 
